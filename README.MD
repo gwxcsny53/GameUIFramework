@@ -83,3 +83,87 @@
 ### 6.2 不准备直接照搬的设计
 
 ### 6.3 需要通过 Demo 验证的问题
+
+TS 基础知识
+
+
+# 构造函数类型 / 构造签名
+
+new (...args:any[]) => T;
+
+class Player{}
+
+let a: Player; // a 是一个Player实例
+let b: typeof Player; // b 是一个Player类
+
+class Dog {}
+let DogType: new () => Dog;
+DogType = Dog; // 不明白这里的意思
+const dog = new DogType();
+
+此时:dog = Dog
+那么 dog 现在是什么东西, dog是一个类,使用需要 new dog() 返回的类型是 Dog
+
+type AssetType<T extends Asset> = new (...args:any[]) => T;
+
+
+
+# 剩余参数
+
+...args:any[] 
+
+func?:(...args:any[])=> void;
+func();
+func(1,2,3);
+
+new (...args:any[]) => T;
+class A {
+    constructor();
+}
+class B {
+    constructor(a,b)
+}
+class C {
+    constructor(a,b,c)
+}
+
+
+# 函数类型:
+
+private progressCallback?:(lodaed:number,total:number)=>void;
+
+type ProgressCallback = (loaded: number, total: number) => void;
+
+private progressCallback?:ProgressCallback;
+
+type Factory<T> = ()=>T;
+
+
+# Array / Map / Set
+
+enemys: [];
+for (let enemy of enemys){
+    enemy.update();
+}
+enemys.sort();
+enemys.filter();
+
+enemyEntitys: Map<String,EnemyEntity>;
+enemyEnitys.get(id):EnemyEntity | undefined;
+enemyEntiys.set(id, enemyEntity);
+enemyEnitys.has(id);
+enemyEnitys.delete(id);
+enemyEnitys.size(); // 数量
+enemyEnitys.clear(); 
+
+for(let enemy of enemyEnitys.values()){
+    enemy.update();
+}
+for(let enemy of enemyEnitys.keys()){
+    consoloe.log(`enemy id: ${enemy}`);
+}
+for(let [key,value] of enemyEnitys){
+    consoloe.log(`enemy id: ${key}, enemy entity: ${value}`)
+}
+
+Map<Node,UICtrl>() ; Map<Entity,Buff[]>() ; Map<Node,Tween>(); Map<Class,Service>();
