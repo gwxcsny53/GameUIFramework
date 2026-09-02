@@ -167,3 +167,38 @@ for(let [key,value] of enemyEnitys){
 }
 
 Map<Node,UICtrl>() ; Map<Entity,Buff[]>() ; Map<Node,Tween>(); Map<Class,Service>();
+
+const ids = new Set<number>();
+ids.add(10001);
+ids.add(10001);
+ids内仍然只有1个10001
+for(const id of ids){
+}
+
+const names = players.map(player => player.name) 将 player[] 转为 string[];
+map() = 转换
+
+const alivePlayers = players.filter(player => player.isAlive == true);
+filter() = 筛选
+
+const player = players.find(player => player.id ==1);
+find() = 查找 (Player|undefined)
+
+const hasPlayer = players.some(player => player.id == 1);
+some() = 是否至少有一个
+
+const allAlive = players.every(player => player.isAlive == true);
+every() = 是否所有都是true
+
+
+# 类型语法
+
+type State = "idle" | "running" | "jumping";
+
+type C = A & B;
+
+Record<string , Asset> 类似于 { [key: string]: Asset }
+
+Partial<T> 把所有字段变成可选
+Pick<T, ...> 只去部分字段
+Omit<T, ...> 排除部分字段
