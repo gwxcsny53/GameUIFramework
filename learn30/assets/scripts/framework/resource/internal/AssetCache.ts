@@ -1,26 +1,32 @@
-import { Asset, isValid } from "cc";
+import { Asset } from "cc";
+import { ResourceScopeId } from "../api/ResourceTypes";
+
+export interface CacheEntry<T extends Asset = Asset> {
+    asset: T;
+    holders: Set<ResourceScopeId>;
+}
 
 export class AssetCache {
-    private cache = new Map<string, Asset>();
+    private cache = new Map<string, CacheEntry>();
 
-    public get<T extends Asset>(path: string): T | null {
-        const asset = this.cache.get(path);
-        if (!asset || !isValid(asset)) {
+    public get<T extends Asset>(key: string): CacheEntry<T> | null {
+        const entry = this.cache.get(key);
+        if (!entry) {
             return null;
         }
-        return asset as T;
+        return entry as CacheEntry<T>;
     }
 
-    public set(path: string, asset: Asset): void {
-        this.cache.set(path, asset);
+    public set(key: string, entry: CacheEntry): void {
+        this.cache.set(key, entry);
     }
 
-    public has(path: string): boolean {
-        return this.cache.has(path);
+    public has(key: string): boolean {
+        return this.cache.has(key);
     }
 
-    public remove(path: string): void {
-        this.cache.delete(path);
+    public remove(key: string): void {
+        this.cache.delete(key);
     }
 
     public clear(): void {
