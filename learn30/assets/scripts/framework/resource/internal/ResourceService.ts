@@ -1,16 +1,16 @@
 import { Asset, SpriteFrame, Prefab, sp, AudioClip, resources } from "cc";
 import { IResourceService } from "../api/IResourceService";
 import { AssetCache } from "./AssetCache";
+import { ResourceLoadKey, ResourceScopeId } from "../api/ResourceTypes";
 
 type AssetType<T extends Asset> = new (...args: any[]) => T;
-type ScopeId = string;
-type LoadKey = string;
+
 export class ResourceService implements IResourceService {
     public readonly name = "ResourceService";
 
     private cache = new AssetCache();
-
-    private _scopeKeys = new Map<ScopeId, Set<LoadKey>>();
+    // scopeId -> Set<ResourceLoadKey>  与 cache 存储相反的关系
+    private _scopeKeys = new Map<ResourceScopeId, Set<ResourceLoadKey>>();
 
     public async init(): Promise<void> {}
 
@@ -27,7 +27,7 @@ export class ResourceService implements IResourceService {
         this._scopeKeys.clear();
     }
 
-    public async load<T extends Asset>(scopeId: ScopeId, path: string, type: AssetType<T>): Promise<T> {
+    public async load<T extends Asset>(scopeId: ResourceScopeId, path: string, type: AssetType<T>): Promise<T> {
         const key = this.makeKey(path, type);
         // 查找缓存
         const cacheEntry = this.cache.get<T>(key);
@@ -56,28 +56,37 @@ export class ResourceService implements IResourceService {
         return asset;
     }
 
-    public async loadSpriteFrame(scopeId: ScopeId, path: string): Promise<SpriteFrame> {
+    public async loadSpriteFrame(scopeId: ResourceScopeId, path: string): Promise<SpriteFrame> {
         return this.load(scopeId, path, SpriteFrame);
     }
 
-    public async loadPrefab(scopeId: ScopeId, path: string): Promise<Prefab> {
+    public async loadPrefab(scopeId: ResourceScopeId, path: string): Promise<Prefab> {
         return this.load(scopeId, path, Prefab);
     }
 
-    public async loadSkeleton(scopeId: ScopeId, path: string): Promise<sp.SkeletonData> {
+    public async loadSkeleton(scopeId: ResourceScopeId, path: string): Promise<sp.SkeletonData> {
         return this.load(scopeId, path, sp.SkeletonData);
     }
 
-    public async loadAudio(scopeId: ScopeId, path: string): Promise<AudioClip> {
+    public async loadAudio(scopeId: ResourceScopeId, path: string): Promise<AudioClip> {
         return this.load(scopeId, path, AudioClip);
     }
-
-    public release<T extends Asset>(scopeId: ScopeId, path: string, type: AssetType<T>): void {
+    /**
+     * 释放指定scopeId下的指定path资源
+     * @param scopeId
+     * @param path
+     * @param type
+     */
+    public release<T extends Asset>(scopeId: ResourceScopeId, path: string, type: AssetType<T>): void {
         const key = this.makeKey(path, type);
         this.releaseByKey(scopeId, key);
     }
-
-    public disposeScope(scopeId: ScopeId): void {
+    /**
+     * 释放相同ScopeId的所有资源
+     * @param scopeId
+     * @returns
+     */
+    public disposeScope(scopeId: ResourceScopeId): void {
         if (!this._scopeKeys.has(scopeId)) {
             return;
         }
@@ -105,20 +114,20 @@ export class ResourceService implements IResourceService {
         });
     }
 
-    private makeKey<T extends Asset>(path: string, type: AssetType<T>): LoadKey {
+    private makeKey<T extends Asset>(path: string, type: AssetType<T>): ResourceLoadKey {
         return `${type.name}:${path}`;
     }
 
-    private trackScope(scopeId: ScopeId, key: LoadKey): void {
+    private trackScope(scopeId: ResourceScopeId, key: ResourceLoadKey): void {
         let keys = this._scopeKeys.get(scopeId);
         if (!keys) {
-            keys = new Set<LoadKey>();
+            keys = new Set<ResourceLoadKey>();
             this._scopeKeys.set(scopeId, keys);
         }
         keys.add(key);
     }
 
-    private releaseByKey(scopeId: ScopeId, key: LoadKey) {
+    private releaseByKey(scopeId: ResourceScopeId, key: ResourceLoadKey) {
         const cacheEntry = this.cache.get(key);
         if (!cacheEntry) {
             return;
