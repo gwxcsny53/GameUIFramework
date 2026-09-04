@@ -13,6 +13,8 @@ export class ResourceService implements IResourceService {
     private _scopeKeys = new Map<ResourceScopeId, Set<ResourceLoadKey>>();
     // ResourceLoadKey -> Promise<Asset> 防止同一个资源多次加载
     private _loadings = new Map<ResourceLoadKey, Promise<Asset>>();
+    // scopeVersions 记录每个scopeId的版本号,检查disposeScope后是否获取的还是上一代的资源版本
+    private _scopeVersions = new Map<ResourceScopeId, number>();
 
     public async init(): Promise<void> {}
 
@@ -31,6 +33,7 @@ export class ResourceService implements IResourceService {
 
     public async load<T extends Asset>(scopeId: ResourceScopeId, path: string, type: AssetType<T>): Promise<T> {
         const key = this.makeKey(path, type);
+        const version = this.getScopeVersion(scopeId);
         // 查找缓存
         const cacheEntry = this.cache.get<T>(key);
         if (cacheEntry) {
@@ -47,6 +50,10 @@ export class ResourceService implements IResourceService {
         const loading = this._loadings.get(key);
         if (loading) {
             const asset = (await loading) as T;
+            if (version !== this.getScopeVersion(scopeId)) {
+                throw new Error(`[ResourceService] ${scopeId} version 版本过期 , stale request!`);
+            }
+
             const cacheEntry = this.cache.get<T>(key);
 
             if (cacheEntry && !cacheEntry.holders.has(scopeId)) {
@@ -61,6 +68,9 @@ export class ResourceService implements IResourceService {
         this._loadings.set(key, loadAndCache);
         try {
             const asset = await loadAndCache;
+            if (version !== this.getScopeVersion(scopeId)) {
+                throw new Error(`[ResourceService] ${scopeId} version 版本过期 , stale request!`);
+            }
             const cacheEntry = this.cache.get(key);
             if (!cacheEntry) {
                 throw new Error(`[ResourceService] Asset loaded but cache entry missing: ${key}`);
@@ -107,6 +117,10 @@ export class ResourceService implements IResourceService {
      * @returns
      */
     public disposeScope(scopeId: ResourceScopeId): void {
+        // 放在最前面,就是防止还未设置上scopeKey时就执行了disposeScope
+        // 更新 scppeId 版本号
+        this.bumpScopeVersion(scopeId);
+
         if (!this._scopeKeys.has(scopeId)) {
             return;
         }
@@ -181,5 +195,15 @@ export class ResourceService implements IResourceService {
         });
 
         return asset;
+    }
+
+    private getScopeVersion(scopeId: ResourceScopeId): number {
+        const version = this._scopeVersions.get(scopeId);
+        return version ?? 0;
+    }
+
+    private bumpScopeVersion(scopeId: ResourceScopeId): void {
+        const version = this.getScopeVersion(scopeId);
+        this._scopeVersions.set(scopeId, version + 1);
     }
 }
