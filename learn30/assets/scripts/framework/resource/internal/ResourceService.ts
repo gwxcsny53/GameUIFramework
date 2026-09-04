@@ -11,6 +11,8 @@ export class ResourceService implements IResourceService {
     private cache = new AssetCache();
     // scopeId -> Set<ResourceLoadKey>  与 cache 存储相反的关系
     private _scopeKeys = new Map<ResourceScopeId, Set<ResourceLoadKey>>();
+    // ResourceLoadKey -> Promise<Asset> 防止同一个资源多次加载
+    private _loadings = new Map<ResourceLoadKey, Promise<Asset>>();
 
     public async init(): Promise<void> {}
 
@@ -31,7 +33,6 @@ export class ResourceService implements IResourceService {
         const key = this.makeKey(path, type);
         // 查找缓存
         const cacheEntry = this.cache.get<T>(key);
-
         if (cacheEntry) {
             const cachedAsset = cacheEntry.asset;
             if (!cacheEntry.holders.has(scopeId)) {
@@ -42,18 +43,37 @@ export class ResourceService implements IResourceService {
             }
             return cachedAsset;
         }
-        // 加载资源
-        const asset = await this.loadAsset<T>(path, type);
-        asset.addRef(); // 增加引用计数，防止被自动释放
-        // 缓存
-        this.cache.set(key, {
-            asset,
-            holders: new Set([scopeId]),
-        });
+        // 检查是否正在loading
+        const loading = this._loadings.get(key);
+        if (loading) {
+            const asset = (await loading) as T;
+            const cacheEntry = this.cache.get<T>(key);
 
-        this.trackScope(scopeId, key);
-
-        return asset;
+            if (cacheEntry && !cacheEntry.holders.has(scopeId)) {
+                cacheEntry.asset.addRef();
+                cacheEntry.holders.add(scopeId);
+                this.trackScope(scopeId, key);
+            }
+            return asset;
+        }
+        // 无cache 非loading 进行初次加载
+        const loadAndCache = this.loadAndCache(path, type, key);
+        this._loadings.set(key, loadAndCache);
+        try {
+            const asset = await loadAndCache;
+            const cacheEntry = this.cache.get(key);
+            if (!cacheEntry) {
+                throw new Error(`[ResourceService] Asset loaded but cache entry missing: ${key}`);
+            }
+            if (!cacheEntry.holders.has(scopeId)) {
+                asset.addRef(); // 增加引用计数，防止被自动释放
+                cacheEntry.holders.add(scopeId);
+                this.trackScope(scopeId, key);
+            }
+            return asset;
+        } finally {
+            this._loadings.delete(key);
+        }
     }
 
     public async loadSpriteFrame(scopeId: ResourceScopeId, path: string): Promise<SpriteFrame> {
@@ -136,10 +156,6 @@ export class ResourceService implements IResourceService {
             return;
         }
 
-        if (this._scopeKeys.has(scopeId)) {
-            this._scopeKeys.get(scopeId).delete(key);
-        }
-
         cacheEntry.holders.delete(scopeId);
         cacheEntry.asset.decRef();
 
@@ -154,5 +170,16 @@ export class ResourceService implements IResourceService {
         if (cacheEntry.holders.size === 0) {
             this.cache.remove(key);
         }
+    }
+
+    private async loadAndCache<T extends Asset>(path: string, type: AssetType<T>, key: ResourceLoadKey): Promise<T> {
+        const asset = await this.loadAsset<T>(path, type);
+
+        this.cache.set(key, {
+            asset,
+            holders: new Set(),
+        });
+
+        return asset;
     }
 }
