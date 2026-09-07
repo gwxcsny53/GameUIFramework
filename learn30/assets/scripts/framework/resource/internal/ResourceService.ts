@@ -1,9 +1,14 @@
 import { Asset, SpriteFrame, Prefab, sp, AudioClip, resources } from "cc";
 import { IResourceService } from "../api/IResourceService";
-import { AssetCache } from "./AssetCache";
+import { AssetCache, CacheEntry } from "./AssetCache";
 import { ResourceLoadKey, ResourceScopeId } from "../api/ResourceTypes";
 
 type AssetType<T extends Asset> = new (...args: any[]) => T;
+
+interface LoadingEntry<T extends Asset = Asset> {
+    promise: Promise<T>;
+    waiters: number;
+}
 
 export class ResourceService implements IResourceService {
     public readonly name = "ResourceService";
@@ -12,7 +17,7 @@ export class ResourceService implements IResourceService {
     // scopeId -> Set<ResourceLoadKey>  与 cache 存储相反的关系
     private _scopeKeys = new Map<ResourceScopeId, Set<ResourceLoadKey>>();
     // ResourceLoadKey -> Promise<Asset> 防止同一个资源多次加载
-    private _loadings = new Map<ResourceLoadKey, Promise<Asset>>();
+    private _loadings = new Map<ResourceLoadKey, LoadingEntry>();
     // scopeVersions 记录每个scopeId的版本号,检查disposeScope后是否获取的还是上一代的资源版本
     private _scopeVersions = new Map<ResourceScopeId, number>();
 
@@ -38,36 +43,21 @@ export class ResourceService implements IResourceService {
         const cacheEntry = this.cache.get<T>(key);
         if (cacheEntry) {
             const cachedAsset = cacheEntry.asset;
-            if (!cacheEntry.holders.has(scopeId)) {
-                cacheEntry.asset.addRef();
-                cacheEntry.holders.add(scopeId);
-
-                this.trackScope(scopeId, key);
-            }
+            this.attachScope(cacheEntry, scopeId, key);
             return cachedAsset;
         }
         // 检查是否正在loading
-        const loading = this._loadings.get(key);
-        if (loading) {
-            const asset = (await loading) as T;
-            if (version !== this.getScopeVersion(scopeId)) {
-                throw new Error(`[ResourceService] ${scopeId} version 版本过期 , stale request!`);
-            }
-
-            const cacheEntry = this.cache.get<T>(key);
-
-            if (cacheEntry && !cacheEntry.holders.has(scopeId)) {
-                cacheEntry.asset.addRef();
-                cacheEntry.holders.add(scopeId);
-                this.trackScope(scopeId, key);
-            }
-            return asset;
+        let loadingEntry = this._loadings.get(key) as LoadingEntry<T> | undefined;
+        if (!loadingEntry) {
+            const promise = this.loadAndCache(path, type, key);
+            loadingEntry = { promise, waiters: 0 };
+            this._loadings.set(key, loadingEntry);
         }
-        // 无cache 非loading 进行初次加载
-        const loadAndCache = this.loadAndCache(path, type, key);
-        this._loadings.set(key, loadAndCache);
+
+        loadingEntry.waiters++;
+
         try {
-            const asset = await loadAndCache;
+            const asset = await loadingEntry.promise;
             if (version !== this.getScopeVersion(scopeId)) {
                 throw new Error(`[ResourceService] ${scopeId} version 版本过期 , stale request!`);
             }
@@ -75,14 +65,23 @@ export class ResourceService implements IResourceService {
             if (!cacheEntry) {
                 throw new Error(`[ResourceService] Asset loaded but cache entry missing: ${key}`);
             }
-            if (!cacheEntry.holders.has(scopeId)) {
-                asset.addRef(); // 增加引用计数，防止被自动释放
-                cacheEntry.holders.add(scopeId);
-                this.trackScope(scopeId, key);
-            }
+            this.attachScope(cacheEntry, scopeId, key);
             return asset;
         } finally {
             this._loadings.delete(key);
+            loadingEntry.waiters--;
+
+            if (loadingEntry.waiters === 0) {
+                if (this._loadings.get(key) === loadingEntry) {
+                    this._loadings.delete(key);
+                }
+
+                const cacheEntry = this.cache.get(key);
+
+                if (cacheEntry && cacheEntry.holders.size === 0) {
+                    this.cache.remove(key);
+                }
+            }
         }
     }
 
@@ -205,5 +204,15 @@ export class ResourceService implements IResourceService {
     private bumpScopeVersion(scopeId: ResourceScopeId): void {
         const version = this.getScopeVersion(scopeId);
         this._scopeVersions.set(scopeId, version + 1);
+    }
+
+    private attachScope<T extends Asset>(cacheEntry: CacheEntry<T>, scopeId: ResourceScopeId, key: ResourceLoadKey) {
+        if (cacheEntry.holders.has(scopeId)) {
+            return;
+        }
+
+        cacheEntry.asset.addRef(); // 增加引用计数，防止被自动释放
+        cacheEntry.holders.add(scopeId);
+        this.trackScope(scopeId, key);
     }
 }
