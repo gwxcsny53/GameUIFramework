@@ -20,25 +20,29 @@ export class ResourceService implements IResourceService {
     private _loadings = new Map<ResourceLoadKey, LoadingEntry>();
     // scopeVersions 记录每个scopeId的版本号,检查disposeScope后是否获取的还是上一代的资源版本
     private _scopeVersions = new Map<ResourceScopeId, number>();
+    // 用于clear的全局版本 每次clear都会将之前版本{加载/正在加载}的内容清空
+    private _globalVersion = 0;
 
     public async init(): Promise<void> {}
 
     public async start(): Promise<void> {}
 
     public async clear(): Promise<void> {
+        this._globalVersion++;
+
         if (this._scopeKeys.size > 0) {
             const scopeIds = Array.from(this._scopeKeys.keys());
             for (const scopeId of scopeIds) {
                 this.disposeScope(scopeId);
             }
         }
-        this.cache.clear();
         this._scopeKeys.clear();
     }
 
     public async load<T extends Asset>(scopeId: ResourceScopeId, path: string, type: AssetType<T>): Promise<T> {
         const key = this.makeKey(path, type);
         const version = this.getScopeVersion(scopeId);
+        const globalVersion = this._globalVersion;
         // 查找缓存
         const cacheEntry = this.cache.get<T>(key);
         if (cacheEntry) {
@@ -46,6 +50,7 @@ export class ResourceService implements IResourceService {
             this.attachScope(cacheEntry, scopeId, key);
             return cachedAsset;
         }
+
         // 检查是否正在loading
         let loadingEntry = this._loadings.get(key) as LoadingEntry<T> | undefined;
         if (!loadingEntry) {
@@ -58,7 +63,7 @@ export class ResourceService implements IResourceService {
 
         try {
             const asset = await loadingEntry.promise;
-            if (version !== this.getScopeVersion(scopeId)) {
+            if (this.isVaildResoucesVersion(scopeId, version, globalVersion)) {
                 throw new Error(`[ResourceService] ${scopeId} version 版本过期 , stale request!`);
             }
             const cacheEntry = this.cache.get(key);
@@ -214,5 +219,9 @@ export class ResourceService implements IResourceService {
         cacheEntry.asset.addRef(); // 增加引用计数，防止被自动释放
         cacheEntry.holders.add(scopeId);
         this.trackScope(scopeId, key);
+    }
+
+    private isVaildResoucesVersion(scopeId: ResourceScopeId, scopeVersion: number, globalVersion: number): boolean {
+        return scopeVersion === this.getScopeVersion(scopeId) && globalVersion === this._globalVersion;
     }
 }
