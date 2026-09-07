@@ -1,4 +1,4 @@
-import { Asset, SpriteFrame, Prefab, sp, AudioClip, resources } from "cc";
+import { Asset, SpriteFrame, Prefab, sp, AudioClip, resources, isValid } from "cc";
 import { IResourceService } from "../api/IResourceService";
 import { AssetCache, CacheEntry } from "./AssetCache";
 import { ResourceLoadKey, ResourceScopeId } from "../api/ResourceTypes";
@@ -44,11 +44,17 @@ export class ResourceService implements IResourceService {
         const version = this.getScopeVersion(scopeId);
         const globalVersion = this._globalVersion;
         // 查找缓存
-        const cacheEntry = this.cache.get<T>(key);
+        let cacheEntry = this.cache.get<T>(key);
         if (cacheEntry) {
             const cachedAsset = cacheEntry.asset;
-            this.attachScope(cacheEntry, scopeId, key);
-            return cachedAsset;
+            if (!isValid(cachedAsset)) {
+                // throw new Error(`[ResourceService] ${scopeId} asset 已经被释放`);
+                this.removeInvalidedCacheEntry(key, cacheEntry);
+                cacheEntry = null;
+            } else {
+                this.attachScope(cacheEntry, scopeId, key);
+                return cachedAsset;
+            }
         }
 
         // 检查是否正在loading
@@ -63,17 +69,19 @@ export class ResourceService implements IResourceService {
 
         try {
             const asset = await loadingEntry.promise;
-            if (this.isVaildResoucesVersion(scopeId, version, globalVersion)) {
+            if (!isValid(asset)) {
+                throw new Error(`[ResourceService] ${scopeId} asset 已经被释放`);
+            }
+            if (!this.isRequestValid(scopeId, version, globalVersion)) {
                 throw new Error(`[ResourceService] ${scopeId} version 版本过期 , stale request!`);
             }
-            const cacheEntry = this.cache.get(key);
+            const cacheEntry = this.cache.get<T>(key);
             if (!cacheEntry) {
                 throw new Error(`[ResourceService] Asset loaded but cache entry missing: ${key}`);
             }
             this.attachScope(cacheEntry, scopeId, key);
             return asset;
         } finally {
-            this._loadings.delete(key);
             loadingEntry.waiters--;
 
             if (loadingEntry.waiters === 0) {
@@ -81,7 +89,7 @@ export class ResourceService implements IResourceService {
                     this._loadings.delete(key);
                 }
 
-                const cacheEntry = this.cache.get(key);
+                const cacheEntry = this.cache.get<T>(key);
 
                 if (cacheEntry && cacheEntry.holders.size === 0) {
                     this.cache.remove(key);
@@ -175,7 +183,9 @@ export class ResourceService implements IResourceService {
         }
 
         cacheEntry.holders.delete(scopeId);
-        cacheEntry.asset.decRef();
+        if (isValid(cacheEntry.asset)) {
+            cacheEntry.asset.decRef();
+        }
 
         const keys = this._scopeKeys.get(scopeId);
         if (keys) {
@@ -221,7 +231,24 @@ export class ResourceService implements IResourceService {
         this.trackScope(scopeId, key);
     }
 
-    private isVaildResoucesVersion(scopeId: ResourceScopeId, scopeVersion: number, globalVersion: number): boolean {
+    private isRequestValid(scopeId: ResourceScopeId, scopeVersion: number, globalVersion: number): boolean {
         return scopeVersion === this.getScopeVersion(scopeId) && globalVersion === this._globalVersion;
+    }
+
+    private removeInvalidedCacheEntry(key: ResourceLoadKey, cacheEntry: CacheEntry) {
+        for (const scopeId of cacheEntry.holders) {
+            const keys = this._scopeKeys.get(scopeId);
+            if (!keys) {
+                continue;
+            }
+
+            keys.delete(key);
+
+            if (keys.size === 0) {
+                this._scopeKeys.delete(scopeId);
+            }
+        }
+
+        this.cache.remove(key);
     }
 }
