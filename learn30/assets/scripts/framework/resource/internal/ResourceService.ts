@@ -10,6 +10,11 @@ interface LoadingEntry<T extends Asset = Asset> {
     waiters: number;
 }
 
+export interface ResourceLoadItem<T extends Asset = Asset> {
+    path: string;
+    type: AssetType<T>;
+}
+
 export class ResourceService implements IResourceService {
     public readonly name = "ResourceService";
 
@@ -96,6 +101,25 @@ export class ResourceService implements IResourceService {
                 }
             }
         }
+    }
+
+    public async loadMany(scopeId: ResourceScopeId, items: ResourceLoadItem[], onProgress?: (loaded: number, total: number) => void): Promise<Map<ResourceLoadKey, Asset>> {
+        const result = new Map<ResourceLoadKey, Asset>();
+        let loaded = 0;
+
+        const tasks = items.map(async (item) => {
+            const asset = await this.load(scopeId, item.path, item.type);
+
+            const key = this.makeKey(item.path, item.type);
+
+            result.set(key, asset);
+            loaded++;
+            onProgress?.(loaded, items.length);
+        });
+
+        await Promise.all(tasks);
+
+        return result;
     }
 
     public async loadSpriteFrame(scopeId: ResourceScopeId, path: string): Promise<SpriteFrame> {

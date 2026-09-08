@@ -86,7 +86,6 @@
 
 TS 基础知识
 
-
 # 构造函数类型 / 构造签名
 
 new (...args:any[]) => T;
@@ -110,7 +109,7 @@ type AssetType<T extends Asset> = new (...args:any[]) => T;
 
 # 剩余参数
 
-...args:any[] 
+...args:any[]
 
 func?:(...args:any[])=> void;
 func();
@@ -138,7 +137,6 @@ private progressCallback?:ProgressCallback;
 
 type Factory<T> = ()=>T;
 
-
 # Array / Map / Set
 
 enemys: [];
@@ -154,7 +152,7 @@ enemyEntiys.set(id, enemyEntity);
 enemyEnitys.has(id);
 enemyEnitys.delete(id);
 enemyEnitys.size(); // 数量
-enemyEnitys.clear(); 
+enemyEnitys.clear();
 
 for(let enemy of enemyEnitys.values()){
     enemy.update();
@@ -202,3 +200,39 @@ Record<string , Asset> 类似于 { [key: string]: Asset }
 Partial<T> 把所有字段变成可选
 Pick<T, ...> 只去部分字段
 Omit<T, ...> 排除部分字段
+
+# Array.map()
+
+const numbers = [1, 2, 3];
+const doubled = numbers.map(n => n \* 2);
+console.log(doubled); // [2, 4, 6]
+
+const names = ["Alice", "Bob", "Charlie"];
+const capitalized = names.map(name => name.toUpperCase());
+console.log(capitalized); // ["ALICE", "BOB", "CHARLIE"]
+
+const fruits = ["apple", "banana", "cherry"];
+const promisedFruits:Promise<string>[] = fiuits.map(async fruit=>{ return fruit;})
+
+
+# Promise / async / await / resolve / reject
+纯async
+async function getData(){
+    const result = await somePromise();
+    return result;
+}
+
+callback转promise
+function getData(){
+    return new Promise((resolve,reject)=>{
+        resource.load(path,type,(err,asset)=>{
+            if(err){
+                reject(err);
+                return;
+            }
+            resolve(asset);
+        })
+    })
+}
+
+
