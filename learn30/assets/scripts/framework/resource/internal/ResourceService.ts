@@ -108,13 +108,20 @@ export class ResourceService implements IResourceService {
         let loaded = 0;
 
         const tasks = items.map(async (item) => {
-            const asset = await this.load(scopeId, item.path, item.type);
 
-            const key = this.makeKey(item.path, item.type);
+            try{
+                const asset = await this.load(scopeId, item.path, item.type);
+                const key = this.makeKey(item.path, item.type);
+                
+                result.set(key, asset);
 
-            result.set(key, asset);
-            loaded++;
-            onProgress?.(loaded, items.length);
+                loaded++;
+
+                onProgress?.(loaded, items.length);
+
+            }catch(error){
+                throw new Error(`[ResourceService] loadMany asset 加载错误: ${item.path}, cause:${error}`);
+            }
         });
 
         await Promise.all(tasks);
