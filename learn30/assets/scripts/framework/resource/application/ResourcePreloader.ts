@@ -1,16 +1,14 @@
 import { IResourceService } from "../api/IResourceService";
 import { ResourceGroups } from "../configs/ResourceGroups";
 
-export class ResourcePreloader{
+export class ResourcePreloader {
+    constructor(private resourceService: IResourceService) {}
 
-
-    constructor(private resourceService:IResourceService){}
-
-    public preloadBattle(onProgress:(loaded:number,total:number)=>void){
-        try{
-            this.resourceService.loadMany("Battle",ResourceGroups.BattleCommon,onProgress)
-        }catch(error){
-            this.resourceService.disposeScope("Battle")
+    public async preloadBattle(onProgress: (loaded: number, total: number) => void) {
+        try {
+            await this.resourceService.loadMany("Battle", ResourceGroups.BattleCommon, onProgress);
+        } catch (error) {
+            this.resourceService.disposeScope("Battle");
             throw new Error(`[ResourcePreloader] preloadBattle error: ${error}`);
         }
     }

@@ -1,18 +1,11 @@
 import { Asset, SpriteFrame, Prefab, sp, AudioClip, resources, isValid } from "cc";
 import { IResourceService } from "../api/IResourceService";
 import { AssetCache, CacheEntry } from "./AssetCache";
-import { ResourceLoadKey, ResourceScopeId } from "../api/ResourceTypes";
-
-type AssetType<T extends Asset> = new (...args: any[]) => T;
+import { AssetType, ResourceLoadKey, ResourceScopeId, ResourceLoadItem } from "../api/ResourceTypes";
 
 interface LoadingEntry<T extends Asset = Asset> {
     promise: Promise<T>;
     waiters: number;
-}
-
-export interface ResourceLoadItem<T extends Asset = Asset> {
-    path: string;
-    type: AssetType<T>;
 }
 
 export class ResourceService implements IResourceService {
@@ -122,16 +115,13 @@ export class ResourceService implements IResourceService {
             }
         });
 
-        const settle = await Promise.allSettled(tasks);
-        const rejected = settle.filter((result) => result.status == "rejected");
+        const settled = await Promise.allSettled(tasks);
+        const rejected = settled.filter((result) => result.status == "rejected");
         if (rejected.length > 0) {
             throw new Error(`[ResourceService] loadMany failed: ` + `${rejected.length}/${items.length}`);
         }
 
-        const fulfilled = settle.filter((result) => result.status == "fulfilled");
-        const succes = fulfilled.map((result) => result.value);
-
-        return succes;
+        return result;
     }
 
     public async loadSpriteFrame(scopeId: ResourceScopeId, path: string): Promise<SpriteFrame> {

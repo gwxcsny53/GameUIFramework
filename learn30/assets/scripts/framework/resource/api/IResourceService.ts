@@ -1,7 +1,6 @@
 import { Asset, SpriteFrame, Prefab, sp, AudioClip } from "cc";
 import { IService } from "../../core/service/IService";
-import { ResourceLoadItem } from "../internal/ResourceService";
-import { ResourceLoadKey, ResourceScopeId } from "./ResourceTypes";
+import { ResourceLoadKey, ResourceScopeId, ResourceLoadItem } from "./ResourceTypes";
 
 export interface IResourceService extends IService {
     load<T extends Asset>(scopeId: ResourceScopeId, path: string, type: new (...args: any[]) => T): Promise<T>;
@@ -13,5 +12,5 @@ export interface IResourceService extends IService {
     loadAudio(scopeId: ResourceScopeId, path: string): Promise<AudioClip>;
 
     release(scopeId: ResourceScopeId, path: string, type: new (...args: any[]) => Asset): void;
-    disposeScope(scopeId:ResourceScopeId):void;
+    disposeScope(scopeId: ResourceScopeId): void;
 }
