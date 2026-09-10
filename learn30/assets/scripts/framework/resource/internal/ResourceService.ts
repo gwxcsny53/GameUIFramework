@@ -108,25 +108,30 @@ export class ResourceService implements IResourceService {
         let loaded = 0;
 
         const tasks = items.map(async (item) => {
-
-            try{
+            try {
                 const asset = await this.load(scopeId, item.path, item.type);
                 const key = this.makeKey(item.path, item.type);
-                
-                result.set(key, asset);
 
+                result.set(key, asset);
+            } catch (error) {
+                throw new Error(`[ResourceService] loadMany asset 加载错误: ${item.path}, cause:${error}`);
+            } finally {
                 loaded++;
 
                 onProgress?.(loaded, items.length);
-
-            }catch(error){
-                throw new Error(`[ResourceService] loadMany asset 加载错误: ${item.path}, cause:${error}`);
             }
         });
 
-        await Promise.all(tasks);
+        const settle = await Promise.allSettled(tasks);
+        const rejected = settle.filter((result) => result.status == "rejected");
+        if (rejected.length > 0) {
+            throw new Error(`[ResourceService] loadMany failed: ` + `${rejected.length}/${items.length}`);
+        }
 
-        return result;
+        const fulfilled = settle.filter((result) => result.status == "fulfilled");
+        const succes = fulfilled.map((result) => result.value);
+
+        return succes;
     }
 
     public async loadSpriteFrame(scopeId: ResourceScopeId, path: string): Promise<SpriteFrame> {
